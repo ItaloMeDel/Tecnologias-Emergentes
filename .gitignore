@@ -21,3 +21,7 @@ ConsultaAPI/.idea/
 # Archivos del sistema
 .DS_Store
 Thumbs.db
+
+
+node_modules/
+.env

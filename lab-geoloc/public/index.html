@@ -1,194 +1,109 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-
 <meta charset="UTF-8">
 <title>Consulta Geolocalización OSM</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
-
 <style>
-
-body{
-font-family:Arial;
-margin:20px;
-}
-
-#map{
-height:450px;
-margin-top:20px;
-}
-
-button{
-margin-top:5px;
-}
-
+  body{font-family:Arial;margin:20px;}
+  #map{height:450px;margin-top:20px;}
+  button{margin-top:5px;}
 </style>
-
 </head>
-
 <body>
 
 <h2>Consulta de Geolocalización — OpenStreetMap</h2>
 
 <fieldset>
-
 <legend>Origen</legend>
-
-Lat:
-<input id="oLat" value="-16.414005">
-
-Lon:
-<input id="oLon" value="-71.515773">
-
-<button onclick="modoSeleccion='origen'">
-Seleccionar Origen
-</button>
-
+Lat: <input id="oLat" value="-16.414005">
+Lon: <input id="oLon" value="-71.515773">
+<button onclick="modoSeleccion='origen'">Seleccionar Origen</button>
 <p id="dirOrigen"></p>
-
 </fieldset>
 
 <fieldset>
-
 <legend>Destino</legend>
-
-Lat:
-<input id="dLat" value="-16.406547">
-
-Lon:
-<input id="dLon" value="-71.553179">
-
-<button onclick="modoSeleccion='destino'">
-Seleccionar Destino
-</button>
-
+Lat: <input id="dLat" value="-16.406547">
+Lon: <input id="dLon" value="-71.553179">
+<button onclick="modoSeleccion='destino'">Seleccionar Destino</button>
 <p id="dirDestino"></p>
-
 </fieldset>
 
 <br>
-
-<button onclick="consultar()">
-Consultar Ruta
-</button>
-
-<p>
-Distancia: <span id="dist"></span> km
-</p>
-
-<p>
-Tiempo estimado: <span id="tiempo"></span> min
-</p>
+<button onclick="consultar()">Consultar Ruta</button>
+<p>Distancia: <span id="dist"></span> km</p>
+<p>Tiempo estimado: <span id="tiempo"></span> min</p>
 
 <div id="map"></div>
 
 <p style="font-size:0.8em;color:#888">
-Datos ©
-<a href="https://www.openstreetmap.org/copyright">
-OpenStreetMap contributors
-</a>
+Datos © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>
 </p>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-
 <script>
+let modoSeleccion=null, markerOrigen=null, markerDestino=null, rutaLinea=null;
 
-let modoSeleccion=null
-let markerOrigen=null
-let markerDestino=null
-let rutaLinea=null
+const map = L.map('map').setView([-16.409,-71.537],13);
 
-const map = L.map('map').setView([-16.409,-71.537],13)
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  attribution:'© OpenStreetMap contributors'
+}).addTo(map);
 
-L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{
-attribution:'© OpenStreetMap contributors'
-}
-).addTo(map)
+/* Selección de puntos en el mapa */
+map.on('click', function(e){
+  if(!modoSeleccion) return;
+  const lat=e.latlng.lat, lon=e.latlng.lng;
+  if(modoSeleccion==="origen"){
+    document.getElementById("oLat").value=lat;
+    document.getElementById("oLon").value=lon;
+    if(markerOrigen) map.removeLayer(markerOrigen);
+    markerOrigen = L.marker([lat,lon]).addTo(map);
+  }
+  if(modoSeleccion==="destino"){
+    document.getElementById("dLat").value=lat;
+    document.getElementById("dLon").value=lon;
+    if(markerDestino) map.removeLayer(markerDestino);
+    markerDestino = L.marker([lat,lon]).addTo(map);
+  }
+  modoSeleccion=null;
+});
 
-/* ── Selección en mapa ── */
-
-map.on('click',function(e){
-
-if(!modoSeleccion) return
-
-const lat = e.latlng.lat
-const lon = e.latlng.lng
-
-if(modoSeleccion==="origen"){
-
-document.getElementById("oLat").value=lat
-document.getElementById("oLon").value=lon
-
-if(markerOrigen) map.removeLayer(markerOrigen)
-
-markerOrigen = L.marker([lat,lon]).addTo(map)
-
-}
-
-if(modoSeleccion==="destino"){
-
-document.getElementById("dLat").value=lat
-document.getElementById("dLon").value=lon
-
-if(markerDestino) map.removeLayer(markerDestino)
-
-markerDestino = L.marker([lat,lon]).addTo(map)
-
-}
-
-modoSeleccion=null
-
-})
-
-/* ── Consultar ruta ── */
-
+/* Consultar ruta */
 async function consultar(){
+  const oLat=v('oLat'), oLon=v('oLon'), dLat=v('dLat'), dLon=v('dLon');
+  try {
+    const gO = await api(`/api/geocode?lat=${oLat}&lon=${oLon}`);
+    const gD = await api(`/api/geocode?lat=${dLat}&lon=${dLon}`);
+    set('dirOrigen', gO.direccion);
+    set('dirDestino', gD.direccion);
 
-const oLat=v('oLat')
-const oLon=v('oLon')
-const dLat=v('dLat')
-const dLon=v('dLon')
+    const r = await api(`/api/ruta?oLat=${oLat}&oLon=${oLon}&dLat=${dLat}&dLon=${dLon}`);
+    
+    if(!r.geometry){
+      alert("Error: no se recibió geometría de la ruta");
+      return;
+    }
 
-const gO = await api(`/api/geocode?lat=${oLat}&lon=${oLon}`)
-const gD = await api(`/api/geocode?lat=${dLat}&lon=${dLon}`)
+    set('dist', r.distancia_km);
+    set('tiempo', r.duracion_min);
 
-set('dirOrigen',gO.direccion)
-set('dirDestino',gD.direccion)
+    /* Dibujar línea de ruta */
+    if(rutaLinea) map.removeLayer(rutaLinea);
+    rutaLinea = L.geoJSON(r.geometry, {style:{color:"blue",weight:5}}).addTo(map);
+    map.fitBounds(rutaLinea.getBounds());
 
-const r = await api(`/api/ruta?oLat=${oLat}&oLon=${oLon}&dLat=${dLat}&dLon=${dLon}`)
-
-set('dist',r.distancia_km)
-set('tiempo',r.duracion_min)
-
-/* Dibujar ruta */
-
-if(rutaLinea){
-map.removeLayer(rutaLinea)
+  } catch(e){
+    alert("Error al consultar ruta: "+e.message);
+    console.error(e);
+  }
 }
 
-rutaLinea = L.geoJSON(r.geometry,{
-style:{
-color:"blue",
-weight:5
-}
-}).addTo(map)
-
-map.fitBounds(rutaLinea.getBounds())
-
-}
-
-/* helpers */
-
-const api=url=>fetch(url).then(r=>r.json())
-
-const v=id=>document.getElementById(id).value
-
-const set=(id,val)=>document.getElementById(id).textContent=val
-
+/* Helpers */
+const api=url=>fetch(url).then(r=>r.json());
+const v=id=>document.getElementById(id).value;
+const set=(id,val)=>document.getElementById(id).textContent=val;
 </script>
-
 </body>
 </html>
